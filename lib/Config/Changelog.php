@@ -2,6 +2,7 @@
 
 namespace MailPoet\Config;
 
+use MailPoet\AdminPages\Pages\MP2Migration;
 use MailPoet\Features\FeaturesController;
 use MailPoet\Settings\SettingsController;
 use MailPoet\Util\Url;
@@ -24,18 +25,23 @@ class Changelog {
   /** @var FeaturesController */
   private $features_controller;
 
+  /** @var MP2Migrator */
+  private $mp2_migrator;
+
   function __construct(
     SettingsController $settings,
     WPFunctions $wp,
     Helper $wooCommerceHelper,
     Url $url_helper,
-    FeaturesController $features_controller
+    FeaturesController $features_controller,
+    MP2Migrator $mp2_migrator
   ) {
     $this->wooCommerceHelper = $wooCommerceHelper;
     $this->settings = $settings;
     $this->wp = $wp;
     $this->url_helper = $url_helper;
     $this->features_controller = $features_controller;
+    $this->mp2_migrator = $mp2_migrator;
   }
 
   function init() {
@@ -75,13 +81,12 @@ class Changelog {
   }
 
   private function checkMp2Migration($version) {
-    $mp2_migrator = new MP2Migrator();
-    if (!in_array($_GET['page'], ['mailpoet-migration', 'mailpoet-settings']) && $mp2_migrator->isMigrationStartedAndNotCompleted()) {
+    if (!in_array($_GET['page'], ['mailpoet-migration', 'mailpoet-settings']) && $this->mp2_migrator->isMigrationStartedAndNotCompleted()) {
       // Force the redirection if the migration has started but is not completed
       return $this->terminateWithRedirect($this->wp->adminUrl('admin.php?page=mailpoet-migration'));
     }
 
-    if ($version === null && $mp2_migrator->isMigrationNeeded()) {
+    if ($version === null && $this->mp2_migrator->isMigrationNeeded()) {
        $this->terminateWithRedirect($this->wp->adminUrl('admin.php?page=mailpoet-migration'));
     }
   }
