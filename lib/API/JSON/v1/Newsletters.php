@@ -5,6 +5,7 @@ namespace MailPoet\API\JSON\v1;
 use Carbon\Carbon;
 use MailPoet\API\JSON\Endpoint as APIEndpoint;
 use MailPoet\API\JSON\Error as APIError;
+use MailPoet\API\JSON\ResponseBuilders\NewslettersResponseBuilder;
 use MailPoet\Config\AccessControl;
 use MailPoet\Cron\CronHelper;
 use MailPoet\Cron\Workers\SendingQueue\Tasks\Newsletter as NewsletterQueueTask;
@@ -18,6 +19,7 @@ use MailPoet\Models\NewsletterTemplate;
 use MailPoet\Models\SendingQueue;
 use MailPoet\Models\Setting;
 use MailPoet\Models\Subscriber;
+use MailPoet\Newsletter\NewslettersRepository;
 use MailPoet\Newsletter\Renderer\Renderer;
 use MailPoet\Newsletter\Scheduler\Scheduler;
 use MailPoet\Newsletter\Url as NewsletterUrl;
@@ -55,6 +57,12 @@ class Newsletters extends APIEndpoint {
     'global' => AccessControl::PERMISSION_MANAGE_EMAILS,
   ];
 
+  /** @var NewslettersRepository */
+  private $newsletters_repository;
+
+  /** @var NewslettersResponseBuilder */
+  private $newsletters_response_builder;
+
   function __construct(
     Listing\BulkActionController $bulk_action,
     Listing\Handler $listing_handler,
@@ -62,7 +70,9 @@ class Newsletters extends APIEndpoint {
     WCHelper $woocommerce_helper,
     SettingsController $settings,
     FeaturesController $features_controller,
-    AuthorizedEmailsController $authorized_emails_controller
+    AuthorizedEmailsController $authorized_emails_controller,
+    NewslettersRepository $newsletters_repository,
+    NewslettersResponseBuilder $newsletters_response_builder
   ) {
     $this->bulk_action = $bulk_action;
     $this->listing_handler = $listing_handler;
@@ -71,25 +81,26 @@ class Newsletters extends APIEndpoint {
     $this->settings = $settings;
     $this->features_controller = $features_controller;
     $this->authorized_emails_controller = $authorized_emails_controller;
+    $this->newsletters_repository = $newsletters_repository;
+    $this->newsletters_response_builder = $newsletters_response_builder;
   }
 
   function get($data = []) {
     $id = (isset($data['id']) ? (int)$data['id'] : false);
-    $newsletter = Newsletter::findOne($id);
-    if ($newsletter instanceof Newsletter) {
-      $newsletter = $newsletter
-        ->withSegments()
-        ->withOptions()
-        ->withSendingQueue();
-
+    $newsletter = $this->newsletters_repository->findOneById($id);
+    if ($newsletter) {
+      $response = $this->newsletters_response_builder->build($newsletter);
       $preview_url = NewsletterUrl::getViewInBrowserUrl(
         NewsletterUrl::TYPE_LISTING_EDITOR,
-        $newsletter,
+        (object)[
+          'id' => $newsletter->getId(),
+          'hash' => $newsletter->getHash(),
+        ],
         Subscriber::getCurrentWPUser()
       );
 
-      $newsletter = $this->wp->applyFilters('mailpoet_api_newsletters_get_after', $newsletter->asArray());
-      return $this->successResponse($newsletter, ['preview_url' => $preview_url]);
+      $response = $this->wp->applyFilters('mailpoet_api_newsletters_get_after', $response);
+      return $this->successResponse($response, ['preview_url' => $preview_url]);
     } else {
       return $this->errorResponse([
         APIError::NOT_FOUND => WPFunctions::get()->__('This email does not exist.', 'mailpoet'),
