@@ -9,6 +9,7 @@ use MailPoet\Cron\Workers\Beamer;
 use MailPoet\Cron\Workers\InactiveSubscribers;
 use MailPoet\Entities\UserFlagEntity;
 use MailPoet\Settings\UserFlagsRepository;
+use MailPoet\Cron\Workers\UnsubscribeTokens;
 use MailPoet\Mailer\MailerLog;
 use MailPoet\Models\NewsletterTemplate;
 use MailPoet\Models\Form;
@@ -152,6 +153,7 @@ class Populator {
     $this->scheduleAuthorizedSendingEmailsCheck();
     $this->scheduleBeamer();
     $this->updateLastSubscribedAt();
+    $this->scheduleUnsubscribeTokens();
     // Will be uncommented on task [MAILPOET-1998]
     // $this->updateFormsSuccessMessages();
   }
@@ -604,6 +606,13 @@ class Populator {
       Subscriber::STATUS_UNCONFIRMED
     ));
     return true;
+  }
+
+  private function scheduleUnsubscribeTokens() {
+    $this->scheduleTask(
+      UnsubscribeTokens::TASK_TYPE,
+      Carbon::createFromTimestamp($this->wp->currentTime('timestamp'))
+    );
   }
 
   private function scheduleTask($type, $datetime) {
